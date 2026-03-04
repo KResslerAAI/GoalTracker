@@ -1,0 +1,249 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+enum Role {
+  MANAGER
+  MEMBER
+}
+
+enum GoalStatus {
+  ACTIVE
+  COMPLETE
+  ARCHIVED
+}
+
+enum ProgressType {
+  BOOLEAN
+  PERCENT
+  NUMERIC
+}
+
+enum CheckinCadence {
+  WEEKLY
+  BIWEEKLY
+}
+
+enum CheckinStatus {
+  PENDING
+  SUBMITTED
+  MISSED
+}
+
+enum NotificationKind {
+  FRIDAY_PROMPT
+  MONDAY_REMINDER
+}
+
+model User {
+  id            String                 @id @default(cuid())
+  name          String?
+  email         String                 @unique
+  emailVerified DateTime?
+  image         String?
+  role          Role                   @default(MEMBER)
+  active        Boolean                @default(true)
+  teamId        String?
+  createdAt     DateTime               @default(now())
+  updatedAt     DateTime               @updatedAt
+
+  team               Team?                 @relation(fields: [teamId], references: [id])
+  checkinPreference  UserCheckinPreference?
+  annualGoalsCreated AnnualGoal[]          @relation("CreatedAnnualGoals")
+  personalGoals      PersonalGoal[]
+  checkins           WeeklyCheckin[]
+  notificationLogs   EmailNotificationLog[]
+  accounts           Account[]
+  sessions           Session[]
+}
+
+model Team {
+  id        String   @id @default(cuid())
+  name      String
+  timezone  String   @default("America/New_York")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  users          User[]
+  annualGoals    AnnualGoal[]
+  checkinQues    CheckinTemplateQuestion[]
+  weeklyCheckins WeeklyCheckin[]
+}
+
+model AnnualGoal {
+  id          String     @id @default(cuid())
+  teamId       String
+  title       String
+  description String?
+  progressPercent Float  @default(0)
+  year        Int
+  status      GoalStatus @default(ACTIVE)
+  createdById String
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+
+  team         Team            @relation(fields: [teamId], references: [id])
+  createdBy    User            @relation("CreatedAnnualGoals", fields: [createdById], references: [id])
+  quarterlyGoals QuarterlyGoal[]
+}
+
+model QuarterlyGoal {
+  id           String     @id @default(cuid())
+  annualGoalId String
+  quarter      Int
+  title        String
+  description  String?
+  weight       Float      @default(1)
+  status       GoalStatus @default(ACTIVE)
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+
+  annualGoal    AnnualGoal    @relation(fields: [annualGoalId], references: [id])
+  personalGoals PersonalGoal[]
+
+  @@unique([annualGoalId, quarter, title])
+}
+
+model PersonalGoal {
+  id              String       @id @default(cuid())
+  ownerUserId     String
+  quarterlyGoalId String
+  title           String
+  description     String?
+  progressType    ProgressType
+  targetValue     Float?
+  unit            String?
+  dueDate         DateTime?
+  status          GoalStatus   @default(ACTIVE)
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+
+  ownerUser      User                @relation(fields: [ownerUserId], references: [id])
+  quarterlyGoal  QuarterlyGoal       @relation(fields: [quarterlyGoalId], references: [id])
+  progressEntries GoalProgressEntry[]
+}
+
+model GoalProgressEntry {
+  id            String   @id @default(cuid())
+  personalGoalId String
+  weekStartDate DateTime
+  valueBoolean  Boolean?
+  valuePercent  Float?
+  valueNumeric  Float?
+  note          String?
+  createdAt     DateTime @default(now())
+
+  personalGoal PersonalGoal @relation(fields: [personalGoalId], references: [id])
+
+  @@unique([personalGoalId, weekStartDate])
+}
+
+model CheckinTemplateQuestion {
+  id         String   @id @default(cuid())
+  teamId     String
+  key        String
+  prompt     String
+  type       String
+  required   Boolean  @default(true)
+  isDefault  Boolean  @default(false)
+  createdAt  DateTime @default(now())
+
+  team Team @relation(fields: [teamId], references: [id])
+  answers WeeklyCheckinAnswer[]
+
+  @@unique([teamId, key])
+}
+
+model UserCheckinPreference {
+  id                  String        @id @default(cuid())
+  userId              String        @unique
+  cadence             CheckinCadence @default(WEEKLY)
+  anchorWeekStartDate DateTime
+  timezone            String?
+  updatedAt           DateTime      @updatedAt
+
+  user User @relation(fields: [userId], references: [id])
+}
+
+model WeeklyCheckin {
+  id            String       @id @default(cuid())
+  userId        String
+  teamId        String
+  weekStartDate DateTime
+  submittedAt   DateTime?
+  status        CheckinStatus @default(PENDING)
+  createdAt     DateTime     @default(now())
+
+  user    User                 @relation(fields: [userId], references: [id])
+  team    Team                 @relation(fields: [teamId], references: [id])
+  answers WeeklyCheckinAnswer[]
+
+  @@unique([userId, weekStartDate])
+}
+
+model WeeklyCheckinAnswer {
+  id           String   @id @default(cuid())
+  checkinId    String
+  questionId   String
+  textAnswer   String?
+  numberAnswer Float?
+  booleanAnswer Boolean?
+
+  checkin  WeeklyCheckin          @relation(fields: [checkinId], references: [id])
+  question CheckinTemplateQuestion @relation(fields: [questionId], references: [id])
+}
+
+model EmailNotificationLog {
+  id             String           @id @default(cuid())
+  userId         String
+  weekStartDate  DateTime
+  kind           NotificationKind
+  sentAt         DateTime         @default(now())
+  deliveryStatus String
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@unique([userId, weekStartDate, kind])
+}
+
+model Account {
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([provider, providerAccountId])
+}
+
+model Session {
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([sessionToken])
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@id([identifier, token])
+}
