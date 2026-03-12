@@ -240,6 +240,18 @@ export function setupMockTeamForManager(managerId: string, teamName: string) {
   return { teamId };
 }
 
+export function getMockTeam(teamId: string) {
+  return store().teamsById[teamId] ?? null;
+}
+
+export function updateMockTeam(teamId: string, updates: Partial<Pick<MockTeam, "name" | "timezone">>) {
+  const s = store();
+  const existing = s.teamsById[teamId];
+  if (!existing) return null;
+  s.teamsById[teamId] = { ...existing, ...updates };
+  return s.teamsById[teamId];
+}
+
 export function getOrCreateMockPreference(userId: string) {
   const s = store();
   const existing = s.preferencesByUserId[userId];
@@ -456,6 +468,16 @@ export function listMockTeamMembers(teamId: string) {
       email: u.email,
       role: u.role
     }));
+}
+
+export function removeMockTeamMember(teamId: string, userId: string) {
+  const s = store();
+  const user = s.usersById[userId];
+  if (!user || user.teamId !== teamId || user.role !== Role.MEMBER) {
+    return null;
+  }
+  user.teamId = null;
+  return { ok: true, userId };
 }
 
 export function getMockDashboard(teamId: string, weekStartDate: Date) {

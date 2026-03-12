@@ -30,6 +30,11 @@ type TeamMember = {
   role: "MANAGER" | "MEMBER";
 };
 
+type TeamSummary = {
+  teamId: string | null;
+  name: string | null;
+};
+
 type SetupGoal = {
   annualId: string;
   quarterlyId: string | null;
@@ -172,6 +177,19 @@ export default function SetupPage() {
 
   const hasTeam = useMemo(() => hasExistingTeam || teamCreatedNow, [hasExistingTeam, teamCreatedNow]);
 
+  const loadTeam = async () => {
+    const res = await fetch("/api/setup/team");
+    const body = await res.json();
+    if (!res.ok) {
+      setTeamMessage(body.error ?? "Failed to load team");
+      return;
+    }
+
+    const team = body as TeamSummary;
+    if (team.name) setTeamName(team.name);
+    if (team.teamId) setTeamCreatedNow(true);
+  };
+
   const loadTeamGoals = async () => {
     if (!hasTeam) {
       setTeamGoals([]);
@@ -237,6 +255,10 @@ export default function SetupPage() {
   };
 
   useEffect(() => {
+    loadTeam().catch(() => undefined);
+  }, []);
+
+  useEffect(() => {
     loadTeamGoals().catch(() => undefined);
     loadMembers().catch(() => undefined);
   }, [hasTeam]);
@@ -246,7 +268,7 @@ export default function SetupPage() {
     setTeamMessage(null);
 
     const response = await fetch("/api/setup/team", {
-      method: "POST",
+      method: hasTeam ? "PATCH" : "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ teamName })
     });
@@ -258,7 +280,7 @@ export default function SetupPage() {
     }
 
     setTeamCreatedNow(true);
-    setTeamMessage("Team created. You can now add members below.");
+    setTeamMessage(hasTeam ? "Team details updated." : "Team created. You can now add members below.");
     await Promise.all([loadTeamGoals(), loadMembers()]);
   };
 
@@ -289,6 +311,22 @@ export default function SetupPage() {
     setMemberName("");
     setMemberEmail("");
     setMembersMessage("Team member added.");
+    await loadMembers();
+  };
+
+  const removeMember = async (memberId: string) => {
+    setMembersMessage(null);
+    const res = await fetch("/api/invitations", {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ userId: memberId })
+    });
+    const body = await res.json();
+    if (!res.ok) {
+      setMembersMessage(body.error ?? "Failed to remove team member");
+      return;
+    }
+    setMembersMessage("Team member removed.");
     await loadMembers();
   };
 
@@ -489,7 +527,7 @@ export default function SetupPage() {
                   Team name
                   <input required value={teamName} onChange={(e) => setTeamName(e.target.value)} />
                 </label>
-                <button type="submit">Create Team</button>
+                <button type="submit">{hasTeam ? "Update Team Name" : "Create Team"}</button>
               </form>
               {teamMessage && <p className="small">{teamMessage}</p>}
 
@@ -510,7 +548,10 @@ export default function SetupPage() {
               <div className="grid grid-2" style={{ gap: "0.7rem" }}>
                 {members.map((member) => (
                   <article key={member.id} className="visual-card">
-                    <strong>{member.name ?? "Unnamed member"}</strong>
+                    <div style={{ display: "flex", justifyContent: "space-between", gap: "0.6rem", alignItems: "center" }}>
+                      <strong>{member.name ?? "Unnamed member"}</strong>
+                      <button type="button" onClick={() => removeMember(member.id)}>Remove</button>
+                    </div>
                     <p className="small" style={{ margin: "0.35rem 0 0" }}>{member.email}</p>
                   </article>
                 ))}
