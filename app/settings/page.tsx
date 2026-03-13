@@ -114,12 +114,7 @@ export default function SettingsPage() {
       <section className="card">
         <div className="section-head">
           <h1>Settings</h1>
-          <p className="small">Manage your check-in cadence here. Use <Link href="/goals">My Goals</Link> for goal setup.</p>
-        </div>
-        <div className="action-row" style={{ marginTop: "0.8rem" }}>
-          <Link href="/goals">
-            <button type="button">Go to My Goals</button>
-          </Link>
+          <p className="small">Manage your check-in cadence here.</p>
         </div>
 
         {!userId && (
@@ -163,6 +158,12 @@ export default function SettingsPage() {
                 <option value="BOTH">Both</option>
               </select>
             </label>
+            <div className="grid" style={{ gap: "0.45rem" }}>
+              <p className="small" style={{ margin: 0 }}>Ready to set your goals?</p>
+              <Link href="/goals">
+                <button type="button">Set Goals</button>
+              </Link>
+            </div>
           </div>
         )}
         {roleMessage && (
