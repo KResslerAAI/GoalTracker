@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useEffect, useState } from "react";
+import { FormEvent, KeyboardEvent, useEffect, useState } from "react";
 import { decodeQuestionPrompt } from "@/lib/checkin-questions";
 import { encodePrioritiesAnswer } from "@/lib/priorities";
 import { formatDisplayDate } from "@/lib/date-format";
@@ -32,6 +32,20 @@ type CheckinData = {
     previousValueNumeric?: number | null;
     previousProgressPercent?: number | null;
     previousWeekStartDate?: string | null;
+  }>;
+};
+
+type SubmissionSummary = {
+  goals: Array<{
+    id: string;
+    title: string;
+    value: string;
+  }>;
+  priorities: string[];
+  answers: Array<{
+    questionId: string;
+    prompt: string;
+    value: string;
   }>;
 };
 
@@ -78,10 +92,21 @@ function formatPreviousValue(goal: CheckinData["goals"][number]) {
   return numeric.toLocaleString();
 }
 
+function formatSubmittedGoalValue(goal: CheckinData["goals"][number], value: boolean | number) {
+  if (goal.progressType === "BOOLEAN") return value ? "Complete" : "Not complete";
+  if (goal.progressType === "PERCENT") return `${Number(value).toFixed(0)}%`;
+  const numeric = Number(value);
+  if (goal.unit === "$") return `$${numeric.toLocaleString()}`;
+  if (goal.unit === "#") return `${numeric.toLocaleString()} #`;
+  if (goal.unit) return `${numeric.toLocaleString()} ${goal.unit}`;
+  return numeric.toLocaleString();
+}
+
 export default function CheckinPage({ params }: { params: { weekStart: string } }) {
   const [data, setData] = useState<CheckinData | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [submitted, setSubmitted] = useState(false);
+  const [submissionSummary, setSubmissionSummary] = useState<SubmissionSummary | null>(null);
   const [priorityActions, setPriorityActions] = useState<Record<string, "complete" | "carry_forward" | "remove">>({});
   const [newPriorities, setNewPriorities] = useState<string[]>(["", "", ""]);
 
@@ -137,14 +162,17 @@ export default function CheckinPage({ params }: { params: { weekStart: string } 
       };
     });
 
+    const mergedPriorities = nextActionsQuestion
+      ? [...new Set([
+          ...(data?.previousPriorities ?? []).filter((priority) => priorityActions[priority] === "carry_forward"),
+          ...newPriorities.map((item) => item.trim()).filter(Boolean)
+        ])].slice(0, 5)
+      : [];
+
     if (nextActionsQuestion) {
-      const carriedForward = (data?.previousPriorities ?? [])
-        .filter((priority) => priorityActions[priority] === "carry_forward");
-      const newlyAdded = newPriorities.map((item) => item.trim()).filter(Boolean);
-      const merged = [...new Set([...carriedForward, ...newlyAdded])].slice(0, 5);
       answers.push({
         questionId: nextActionsQuestion.id,
-        textAnswer: encodePrioritiesAnswer(merged)
+        textAnswer: encodePrioritiesAnswer(mergedPriorities)
       });
     }
 
@@ -164,6 +192,28 @@ export default function CheckinPage({ params }: { params: { weekStart: string } 
       return { personalGoalId: goal.id, valueNumeric: value };
     });
 
+    const nextSummary: SubmissionSummary = {
+      goals: (data?.goals ?? []).map((goal) => {
+        const submittedValue = goal.progressType === "BOOLEAN"
+          ? progress.find((entry) => entry.personalGoalId === goal.id)?.valueBoolean ?? false
+          : goal.progressType === "PERCENT"
+            ? progress.find((entry) => entry.personalGoalId === goal.id)?.valuePercent ?? 0
+            : progress.find((entry) => entry.personalGoalId === goal.id)?.valueNumeric ?? 0;
+
+        return {
+          id: goal.id,
+          title: displayGoalTitle(goal.title),
+          value: formatSubmittedGoalValue(goal, submittedValue)
+        };
+      }),
+      priorities: mergedPriorities,
+      answers: additionalQuestions.map((q) => ({
+        questionId: q.id,
+        prompt: decodeQuestionPrompt(q.prompt).prompt,
+        value: answers.find((answer) => answer.questionId === q.id)?.textAnswer?.trim() || "No response"
+      }))
+    };
+
     const res = await fetch(`/api/checkins/${params.weekStart}/submit`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -176,7 +226,18 @@ export default function CheckinPage({ params }: { params: { weekStart: string } 
       return;
     }
 
+    setSubmissionSummary(nextSummary);
     setSubmitted(true);
+  };
+
+  const preventEnterSubmit = (event: KeyboardEvent<HTMLFormElement>) => {
+    if (event.key !== "Enter") return;
+    const target = event.target as HTMLElement | null;
+    if (!target) return;
+    const tagName = target.tagName;
+    if (tagName === "TEXTAREA") return;
+    if (tagName === "BUTTON") return;
+    event.preventDefault();
   };
 
   if (error) {
@@ -205,9 +266,50 @@ export default function CheckinPage({ params }: { params: { weekStart: string } 
         </p>
       </div>
       {submitted ? (
-        <p className="small">Submitted successfully.</p>
+        <section className="grid" style={{ gap: "0.8rem" }}>
+          <p className="small" style={{ margin: 0 }}>Submitted successfully.</p>
+
+          <div className="visual-card" style={{ display: "grid", gap: "0.65rem" }}>
+            <h2 style={{ margin: 0 }}>What You Submitted</h2>
+            <div className="grid" style={{ gap: "0.55rem" }}>
+              {submissionSummary?.goals.map((goal) => (
+                <div key={goal.id} className="card" style={{ padding: "0.7rem" }}>
+                  <strong>{goal.title}</strong>
+                  <p className="small" style={{ margin: "0.25rem 0 0" }}>{goal.value}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="visual-card" style={{ display: "grid", gap: "0.65rem" }}>
+            <h2 style={{ margin: 0 }}>Priorities</h2>
+            {submissionSummary?.priorities.length ? (
+              <div className="grid" style={{ gap: "0.55rem" }}>
+                {submissionSummary.priorities.map((priority) => (
+                  <div key={priority} className="card" style={{ padding: "0.7rem" }}>
+                    <p className="small" style={{ margin: 0 }}>{priority}</p>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="small" style={{ margin: 0 }}>No priorities submitted.</p>
+            )}
+          </div>
+
+          <div className="visual-card" style={{ display: "grid", gap: "0.65rem" }}>
+            <h2 style={{ margin: 0 }}>Additional Check-in Questions</h2>
+            <div className="grid" style={{ gap: "0.55rem" }}>
+              {submissionSummary?.answers.map((answer) => (
+                <div key={answer.questionId} className="card" style={{ padding: "0.7rem" }}>
+                  <strong>{answer.prompt}</strong>
+                  <p className="small" style={{ margin: "0.25rem 0 0" }}>{answer.value}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        </section>
       ) : (
-        <form onSubmit={submit} className="grid" style={{ gap: "0.8rem" }}>
+        <form onSubmit={submit} onKeyDown={preventEnterSubmit} className="grid" style={{ gap: "0.8rem" }}>
           <h2 style={{ margin: 0 }}>Goal Progress</h2>
           {(data.goals ?? []).map((goal) => (
             <div key={goal.id} className="visual-card" style={{ display: "grid", gap: "0.65rem" }}>

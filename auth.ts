@@ -64,7 +64,9 @@ if (allowInsecureCredentialsAuth) {
         return {
           id: user.id,
           email: user.email,
-          name: user.name
+          name: user.name,
+          role: user.role,
+          teamId: user.teamId
         };
       }
     })
@@ -91,7 +93,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     : {
         adapter: PrismaAdapter(prisma),
         session: {
-          strategy: "database" as const
+          strategy: allowInsecureCredentialsAuth ? ("jwt" as const) : ("database" as const)
         }
       }),
   providers,

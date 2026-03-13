@@ -574,6 +574,66 @@ export function getMockDashboard(teamId: string, weekStartDate: Date) {
   };
 }
 
+export function getMockMemberDashboard(userId: string) {
+  const s = store();
+  const user = s.usersById[userId];
+  if (!user || !user.teamId) {
+    throw new Error("No team assigned");
+  }
+
+  const team = s.teamsById[user.teamId];
+  const teamGoals = Object.values(s.annualGoalsById)
+    .filter((goal) => goal.teamId === user.teamId && goal.status === GoalStatus.ACTIVE)
+    .map((annual) => {
+      const quarterly = Object.values(s.quarterlyGoalsById).filter((q) => q.annualGoalId === annual.id);
+      const personalGoals = quarterly
+        .flatMap((q) => Object.values(s.goalsById).filter((g) => g.quarterlyGoalId === q.id && g.ownerUserId === user.id && g.status === GoalStatus.ACTIVE))
+        .map((goal) => {
+          const latest = getLatestProgressEntry(goal.id);
+          return {
+            id: goal.id,
+            title: goal.title,
+            dueDate: goal.dueDate ?? null,
+            unit: goal.unit ?? null,
+            targetValue: goal.targetValue ?? null,
+            progressPercent: progressToPercent({
+              progressType: goal.progressType,
+              valueBoolean: latest?.valueBoolean,
+              valuePercent: latest?.valuePercent,
+              valueNumeric: latest?.valueNumeric,
+              targetValue: goal.targetValue ?? null
+            })
+          };
+        });
+
+      const fromAnnual = parseTracking(annual.description);
+      const fromQuarterly = quarterly.map((q) => parseTracking(q.description)).find((tracking) => Boolean(tracking));
+      const tracking = fromAnnual ?? fromQuarterly ?? null;
+
+      return {
+        id: annual.id,
+        title: annual.title,
+        startDate: `${annual.year}-01-01`,
+        endDate: `${annual.year}-12-31`,
+        progressPercent: annual.progressPercent,
+        tracking: tracking
+          ? {
+              unit: tracking.unit,
+              targetValue: tracking.targetValue,
+              progressValue: (annual.progressPercent / 100) * tracking.targetValue
+            }
+          : null,
+        personalGoals
+      };
+    });
+
+  return {
+    name: user.name ?? user.email,
+    teamName: team?.name ?? "Team",
+    teamGoals
+  };
+}
+
 export function getMockCheckinData(userId: string, weekStartDate: Date, teamId: string | null) {
   const s = store();
   const pref = getOrCreateMockPreference(userId);

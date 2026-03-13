@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import type { CSSProperties } from "react";
+import { useSession } from "next-auth/react";
 import { decodeQuestionPrompt } from "@/lib/checkin-questions";
 import { decodePrioritiesAnswer } from "@/lib/priorities";
 import { formatDisplayDate } from "@/lib/date-format";
@@ -62,6 +63,31 @@ type ReportPayload = {
       ownerEmail: string;
       status: "ACTIVE" | "COMPLETE" | "ARCHIVED";
       dueDate?: string | null;
+      progressPercent: number;
+    }>;
+  }>;
+};
+
+type MemberDashboardData = {
+  name: string;
+  teamName: string;
+  teamGoals: Array<{
+    id: string;
+    title: string;
+    startDate: string;
+    endDate: string;
+    progressPercent: number;
+    tracking?: {
+      unit: string;
+      targetValue: number;
+      progressValue: number;
+    } | null;
+    personalGoals: Array<{
+      id: string;
+      title: string;
+      dueDate?: string | null;
+      unit?: string | null;
+      targetValue?: number | null;
       progressPercent: number;
     }>;
   }>;
@@ -187,7 +213,10 @@ function downloadReportXlsx(startDate: string, endDate: string) {
 }
 
 export default function DashboardPage() {
+  const { data: session, status } = useSession();
+  const role = session?.user?.role;
   const [data, setData] = useState<DashboardData | null>(null);
+  const [memberData, setMemberData] = useState<MemberDashboardData | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [teamProgressDraft, setTeamProgressDraft] = useState<Record<string, string>>({});
   const [savingGoalId, setSavingGoalId] = useState<string | null>(null);
@@ -203,28 +232,51 @@ export default function DashboardPage() {
   const weekStartForDashboard = currentWeekStartISO();
 
   useEffect(() => {
-    fetch(`/api/manager/dashboard?weekStart=${weekStartForDashboard}`)
-      .then(async (r) => {
-        const text = await r.text();
-        let body: Record<string, unknown> = {};
-        try {
-          body = text ? JSON.parse(text) : {};
-        } catch {
+    if (status !== "authenticated") return;
+    setError(null);
+
+    if (role === "MANAGER") {
+      fetch(`/api/manager/dashboard?weekStart=${weekStartForDashboard}`)
+        .then(async (r) => {
+          const text = await r.text();
+          let body: Record<string, unknown> = {};
+          try {
+            body = text ? JSON.parse(text) : {};
+          } catch {
+            if (!r.ok) {
+              throw new Error("Dashboard API returned non-JSON response. Check server logs.");
+            }
+          }
           if (!r.ok) {
-            throw new Error("Dashboard API returned non-JSON response. Check server logs.");
+            if (r.status === 403 || r.status === 401) {
+              throw new Error("Log in and complete /setup before using the manager dashboard.");
+            }
+            throw new Error((body.error as string) ?? "Failed to load dashboard");
           }
-        }
+          return body as DashboardData;
+        })
+        .then((body) => {
+          setData(body);
+          setMemberData(null);
+        })
+        .catch((e) => setError((e as Error).message));
+      return;
+    }
+
+    fetch("/api/member/dashboard")
+      .then(async (r) => {
+        const body = await r.json();
         if (!r.ok) {
-          if (r.status === 403 || r.status === 401) {
-            throw new Error("Log in and complete /setup before using the manager dashboard.");
-          }
-          throw new Error((body.error as string) ?? "Failed to load dashboard");
+          throw new Error(body.error ?? "Failed to load dashboard");
         }
-        return body as DashboardData;
+        return body as MemberDashboardData;
       })
-      .then(setData)
+      .then((body) => {
+        setMemberData(body);
+        setData(null);
+      })
       .catch((e) => setError((e as Error).message));
-  }, [weekStartForDashboard]);
+  }, [role, status, weekStartForDashboard]);
 
   const loadReport = async (startDate: string, endDate: string) => {
     setReportError(null);
@@ -324,6 +376,91 @@ export default function DashboardPage() {
       setCheckinLoading(false);
     }
   };
+
+  if (status === "loading") {
+    return (
+      <div className="page-shell">
+        <section className="card">
+          <p className="small">Loading...</p>
+        </section>
+      </div>
+    );
+  }
+
+  if (role !== "MANAGER") {
+    return (
+      <div className="page-shell">
+        <section className="card">
+          <div className="section-head">
+            <h1>My Dashboard</h1>
+            <p className="small">See team goal progress and how your individual goals support those outcomes.</p>
+          </div>
+          {!memberData && !error && <p className="small">Loading...</p>}
+          {error && <p className="small" style={{ color: "#b91c1c" }}>{error}</p>}
+        </section>
+
+        {memberData && (
+          <section className="card">
+            <div className="section-head">
+              <h2 style={{ marginTop: 0 }}>Team Goal Progress</h2>
+              <p className="small">{memberData.teamName}</p>
+            </div>
+            <div className="grid" style={{ gap: "0.75rem" }}>
+              {memberData.teamGoals.map((goal) => (
+                <div key={goal.id} className="visual-card team-goal-card">
+                  <div className="team-goal-top">
+                    <div className="team-goal-main">
+                      <div className="team-goal-header">
+                        <div className="team-goal-title-wrap">
+                          <strong className="team-goal-title">{goal.title}</strong>
+                          <p className="small team-goal-subtitle">
+                            {goal.tracking
+                              ? `Target: ${formatValue(goal.tracking.targetValue, goal.tracking.unit)} between ${formatDisplayDate(goal.startDate)} and ${formatDisplayDate(goal.endDate)}`
+                              : `Between ${formatDisplayDate(goal.startDate)} and ${formatDisplayDate(goal.endDate)}`}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                    <DonutProgress value={goal.progressPercent} />
+                  </div>
+
+                  <details className="team-goal-expander" open>
+                    <summary>
+                      <span>
+                        My Goals
+                        <span className="small" style={{ marginLeft: "0.5rem" }}>
+                          ({goal.personalGoals.length})
+                        </span>
+                      </span>
+                    </summary>
+                    <div className="grid team-goal-contributors">
+                      {goal.personalGoals.map((personalGoal) => (
+                        <div key={personalGoal.id} className="card team-goal-contributor-card">
+                          <div className="team-goal-contributor-header">
+                            <strong>{personalGoal.title}</strong>
+                          </div>
+                          <p className="small team-goal-contributor-owner" style={{ marginBottom: "0.25rem" }}>
+                            {personalGoal.targetValue != null
+                              ? `Target: ${personalGoal.unit ? formatValue(personalGoal.targetValue, personalGoal.unit) : personalGoal.targetValue.toLocaleString()}${personalGoal.dueDate ? ` by ${formatDisplayDate(personalGoal.dueDate)}` : ""}`
+                              : personalGoal.dueDate
+                                ? `Due: ${formatDisplayDate(personalGoal.dueDate)}`
+                                : "No target details"}
+                          </p>
+                          <ProgressBar value={personalGoal.progressPercent} />
+                        </div>
+                      ))}
+                      {goal.personalGoals.length === 0 && <p className="small">No personal goals mapped to this team goal yet.</p>}
+                    </div>
+                  </details>
+                </div>
+              ))}
+              {memberData.teamGoals.length === 0 && <p className="small">No team goals found.</p>}
+            </div>
+          </section>
+        )}
+      </div>
+    );
+  }
 
   return (
     <div className="page-shell">

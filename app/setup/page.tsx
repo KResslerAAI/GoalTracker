@@ -1,6 +1,7 @@
 "use client";
 
 import { FormEvent, useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import { useSession } from "next-auth/react";
 import { Role } from "@prisma/client";
 import { formatDisplayDate } from "@/lib/date-format";
@@ -508,6 +509,11 @@ export default function SetupPage() {
         <div className="section-head">
           <h1>Team Setup</h1>
           <p className="small">Use expandable sections to set up your team and goals.</p>
+        </div>
+        <div className="action-row" style={{ marginTop: "0.8rem" }}>
+          <Link href="/goals">
+            <button type="button">Go to My Goals</button>
+          </Link>
         </div>
       </section>
 
