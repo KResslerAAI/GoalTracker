@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, KeyboardEvent, useEffect, useState } from "react";
+import { FormEvent, KeyboardEvent, useEffect, useMemo, useState } from "react";
 import { decodeQuestionPrompt } from "@/lib/checkin-questions";
 import { encodePrioritiesAnswer } from "@/lib/priorities";
 import { formatDisplayDate } from "@/lib/date-format";
@@ -13,11 +13,28 @@ type CheckinQuestion = {
   required: boolean;
 };
 
+type HistoryGoal = {
+  id: string;
+  title: string;
+  progressType: "BOOLEAN" | "PERCENT" | "NUMERIC";
+  unit?: string | null;
+  valueBoolean?: boolean | null;
+  valuePercent?: number | null;
+  valueNumeric?: number | null;
+};
+
 type CheckinData = {
   due: boolean;
-  checkin: { id: string } | null;
+  checkin: { id: string; status: string; submittedAt?: string | null } | null;
   questions: CheckinQuestion[];
   previousPriorities?: string[];
+  currentPriorities?: string[];
+  currentAnswers?: Array<{
+    questionId: string;
+    textAnswer?: string | null;
+    numberAnswer?: number | null;
+    booleanAnswer?: boolean | null;
+  }>;
   lastCheckinDate?: string | null;
   goals: Array<{
     id: string;
@@ -27,11 +44,37 @@ type CheckinData = {
     progressType: "BOOLEAN" | "PERCENT" | "NUMERIC";
     unit?: string | null;
     targetValue?: number | null;
+    currentValueBoolean?: boolean | null;
+    currentValuePercent?: number | null;
+    currentValueNumeric?: number | null;
+    currentProgressPercent?: number | null;
     previousValueBoolean?: boolean | null;
     previousValuePercent?: number | null;
     previousValueNumeric?: number | null;
     previousProgressPercent?: number | null;
     previousWeekStartDate?: string | null;
+  }>;
+  history?: Array<{
+    id: string;
+    weekStartDate: string;
+    submittedAt: string;
+    priorities: string[];
+    answers: Array<{
+      questionId: string;
+      prompt: string;
+      textAnswer?: string | null;
+      numberAnswer?: number | null;
+      booleanAnswer?: boolean | null;
+    }>;
+    goals: Array<{
+      id: string;
+      title: string;
+      progressType: "BOOLEAN" | "PERCENT" | "NUMERIC";
+      unit?: string | null;
+      valueBoolean?: boolean | null;
+      valuePercent?: number | null;
+      valueNumeric?: number | null;
+    }>;
   }>;
 };
 
@@ -102,24 +145,46 @@ function formatSubmittedGoalValue(goal: CheckinData["goals"][number], value: boo
   return numeric.toLocaleString();
 }
 
+function formatHistoryAnswerValue(answer: {
+  textAnswer?: string | null;
+  numberAnswer?: number | null;
+  booleanAnswer?: boolean | null;
+}) {
+  if (answer.textAnswer && answer.textAnswer.trim()) return answer.textAnswer.trim();
+  if (typeof answer.numberAnswer === "number") return String(answer.numberAnswer);
+  if (typeof answer.booleanAnswer === "boolean") return answer.booleanAnswer ? "Yes" : "No";
+  return "No response";
+}
+
+function formatHistoryGoalValue(goal: HistoryGoal) {
+  if (goal.progressType === "BOOLEAN") return goal.valueBoolean ? "Complete" : "Not complete";
+  if (goal.progressType === "PERCENT") return `${Number(goal.valuePercent ?? 0).toFixed(0)}%`;
+  const numeric = Number(goal.valueNumeric ?? 0);
+  if (goal.unit === "$") return `$${numeric.toLocaleString()}`;
+  if (goal.unit === "#") return `${numeric.toLocaleString()} #`;
+  if (goal.unit) return `${numeric.toLocaleString()} ${goal.unit}`;
+  return numeric.toLocaleString();
+}
+
 export default function CheckinPage({ params }: { params: { weekStart: string } }) {
   const [data, setData] = useState<CheckinData | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [submitted, setSubmitted] = useState(false);
+  const [savedMessage, setSavedMessage] = useState<string | null>(null);
   const [submissionSummary, setSubmissionSummary] = useState<SubmissionSummary | null>(null);
   const [priorityActions, setPriorityActions] = useState<Record<string, "complete" | "carry_forward" | "remove">>({});
   const [newPriorities, setNewPriorities] = useState<string[]>(["", "", ""]);
 
+  const loadCheckin = async () => {
+    const response = await fetch(`/api/checkins/${params.weekStart}`, { cache: "no-store" });
+    const body = await response.json();
+    if (!response.ok) {
+      throw new Error(body.error ?? "Failed to load check-in");
+    }
+    setData(body);
+  };
+
   useEffect(() => {
-    fetch(`/api/checkins/${params.weekStart}`)
-      .then(async (r) => {
-        const body = await r.json();
-        if (!r.ok) {
-          throw new Error(body.error ?? "Failed to load check-in");
-        }
-        return body;
-      })
-      .then(setData)
+    loadCheckin()
       .catch((e) => setError((e as Error).message));
   }, [params.weekStart]);
 
@@ -132,6 +197,15 @@ export default function CheckinPage({ params }: { params: { weekStart: string } 
     setPriorityActions(next);
   }, [data?.previousPriorities]);
 
+  useEffect(() => {
+    const submittedPriorities = data?.currentPriorities?.length
+      ? data.currentPriorities
+      : [];
+    const next = submittedPriorities.length ? [...submittedPriorities] : ["", "", ""];
+    while (next.length < 3) next.push("");
+    setNewPriorities(next.slice(0, 5));
+  }, [data?.currentPriorities]);
+
   const questions = data?.questions ?? [];
   const nextActionsQuestion = questions.find(
     (q) =>
@@ -139,9 +213,27 @@ export default function CheckinPage({ params }: { params: { weekStart: string } 
       q.prompt.toLowerCase().includes("3-5 things you'll do in the next week")
   );
   const additionalQuestions = questions.filter((q) => q !== nextActionsQuestion);
+  const currentAnswersByQuestionId = useMemo(() => {
+    const entries = (data?.currentAnswers ?? []).map((answer) => [answer.questionId, answer] as const);
+    return Object.fromEntries(entries);
+  }, [data?.currentAnswers]);
+  const hasSubmittedCurrentWeek = data?.checkin?.status === "SUBMITTED";
+  const formKey = useMemo(() => JSON.stringify({
+    submittedAt: data?.checkin?.submittedAt ?? null,
+    goals: (data?.goals ?? []).map((goal) => ({
+      id: goal.id,
+      currentValueBoolean: goal.currentValueBoolean ?? null,
+      currentValuePercent: goal.currentValuePercent ?? null,
+      currentValueNumeric: goal.currentValueNumeric ?? null
+    })),
+    priorities: data?.currentPriorities ?? [],
+    answers: data?.currentAnswers ?? []
+  }), [data?.checkin?.submittedAt, data?.goals, data?.currentPriorities, data?.currentAnswers]);
 
   const submit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
+    setError(null);
+    setSavedMessage(null);
     const form = new FormData(e.currentTarget);
 
     const answers = additionalQuestions.map((q) => {
@@ -227,7 +319,8 @@ export default function CheckinPage({ params }: { params: { weekStart: string } 
     }
 
     setSubmissionSummary(nextSummary);
-    setSubmitted(true);
+    setSavedMessage("Check-in saved.");
+    await loadCheckin();
   };
 
   const preventEnterSubmit = (event: KeyboardEvent<HTMLFormElement>) => {
@@ -265,51 +358,55 @@ export default function CheckinPage({ params }: { params: { weekStart: string } 
           You checked in last on {formatLastCheckinDate(data.lastCheckinDate)}. What&apos;s changed since then?
         </p>
       </div>
-      {submitted ? (
-        <section className="grid" style={{ gap: "0.8rem" }}>
-          <p className="small" style={{ margin: 0 }}>Submitted successfully.</p>
+      {savedMessage ? (
+        <div className="card" style={{ padding: "0.8rem", marginBottom: "0.8rem" }}>
+          <p className="small" style={{ margin: 0 }}>{savedMessage}</p>
+        </div>
+      ) : null}
 
-          <div className="visual-card" style={{ display: "grid", gap: "0.65rem" }}>
-            <h2 style={{ margin: 0 }}>What You Submitted</h2>
-            <div className="grid" style={{ gap: "0.55rem" }}>
-              {submissionSummary?.goals.map((goal) => (
-                <div key={goal.id} className="card" style={{ padding: "0.7rem" }}>
-                  <strong>{goal.title}</strong>
-                  <p className="small" style={{ margin: "0.25rem 0 0" }}>{goal.value}</p>
-                </div>
-              ))}
-            </div>
+      {(hasSubmittedCurrentWeek || submissionSummary) ? (
+        <section className="visual-card" style={{ display: "grid", gap: "0.65rem", marginBottom: "0.8rem" }}>
+          <h2 style={{ margin: 0 }}>Current Saved Check-in</h2>
+          <p className="small" style={{ margin: 0 }}>
+            {data.checkin?.submittedAt
+              ? `Last saved ${formatDisplayDate(data.checkin.submittedAt.slice(0, 10))}.`
+              : "Your current week submission is saved."}
+          </p>
+          <div className="grid" style={{ gap: "0.55rem" }}>
+            {(submissionSummary?.goals ?? data.goals.map((goal) => ({
+              id: goal.id,
+              title: displayGoalTitle(goal.title),
+              value: goal.progressType === "BOOLEAN"
+                ? formatSubmittedGoalValue(goal, Boolean(goal.currentValueBoolean))
+                : formatSubmittedGoalValue(
+                    goal,
+                    Number(goal.progressType === "PERCENT" ? goal.currentValuePercent ?? 0 : goal.currentValueNumeric ?? 0)
+                  )
+            }))).map((goal) => (
+              <div key={goal.id} className="card" style={{ padding: "0.7rem" }}>
+                <strong>{goal.title}</strong>
+                <p className="small" style={{ margin: "0.25rem 0 0" }}>{goal.value}</p>
+              </div>
+            ))}
           </div>
-
-          <div className="visual-card" style={{ display: "grid", gap: "0.65rem" }}>
-            <h2 style={{ margin: 0 }}>Priorities</h2>
-            {submissionSummary?.priorities.length ? (
-              <div className="grid" style={{ gap: "0.55rem" }}>
-                {submissionSummary.priorities.map((priority) => (
-                  <div key={priority} className="card" style={{ padding: "0.7rem" }}>
+          <div className="grid" style={{ gap: "0.55rem" }}>
+            <strong>Saved priorities</strong>
+            {(data.currentPriorities ?? submissionSummary?.priorities ?? []).length ? (
+              <div className="grid" style={{ gap: "0.45rem" }}>
+                {(data.currentPriorities ?? submissionSummary?.priorities ?? []).map((priority) => (
+                  <div key={priority} className="card" style={{ padding: "0.65rem" }}>
                     <p className="small" style={{ margin: 0 }}>{priority}</p>
                   </div>
                 ))}
               </div>
             ) : (
-              <p className="small" style={{ margin: 0 }}>No priorities submitted.</p>
+              <p className="small" style={{ margin: 0 }}>No priorities saved yet.</p>
             )}
           </div>
-
-          <div className="visual-card" style={{ display: "grid", gap: "0.65rem" }}>
-            <h2 style={{ margin: 0 }}>Additional Check-in Questions</h2>
-            <div className="grid" style={{ gap: "0.55rem" }}>
-              {submissionSummary?.answers.map((answer) => (
-                <div key={answer.questionId} className="card" style={{ padding: "0.7rem" }}>
-                  <strong>{answer.prompt}</strong>
-                  <p className="small" style={{ margin: "0.25rem 0 0" }}>{answer.value}</p>
-                </div>
-              ))}
-            </div>
-          </div>
         </section>
-      ) : (
-        <form onSubmit={submit} onKeyDown={preventEnterSubmit} className="grid" style={{ gap: "0.8rem" }}>
+      ) : null}
+
+      <form key={formKey} onSubmit={submit} onKeyDown={preventEnterSubmit} className="grid" style={{ gap: "0.8rem" }}>
           <h2 style={{ margin: 0 }}>Goal Progress</h2>
           {(data.goals ?? []).map((goal) => (
             <div key={goal.id} className="visual-card" style={{ display: "grid", gap: "0.65rem" }}>
@@ -337,16 +434,31 @@ export default function CheckinPage({ params }: { params: { weekStart: string } 
                   <span className="small">{clampPercent(goal.previousProgressPercent).toFixed(0)}%</span>
                   <span className="small">100%</span>
                 </div>
+                {hasSubmittedCurrentWeek ? (
+                  <p className="small" style={{ margin: "0.2rem 0 0" }}>
+                    Current saved update: {goal.progressType === "BOOLEAN"
+                      ? formatSubmittedGoalValue(goal, Boolean(goal.currentValueBoolean))
+                      : formatSubmittedGoalValue(
+                          goal,
+                          Number(goal.progressType === "PERCENT" ? goal.currentValuePercent ?? 0 : goal.currentValueNumeric ?? 0)
+                        )}.
+                  </p>
+                ) : null}
               </div>
               <label>
                 {goal.progressType === "BOOLEAN" ? "Mark complete this week" : "Update your progress as of today."}
                 {goal.progressType === "BOOLEAN" ? (
-                  <input type="checkbox" name={`goal-${goal.id}`} />
+                  <input type="checkbox" name={`goal-${goal.id}`} defaultChecked={Boolean(goal.currentValueBoolean)} />
                 ) : (
                   <input
                     style={{ marginTop: "0.4rem" }}
                     type="number"
                     name={`goal-${goal.id}`}
+                    defaultValue={
+                      goal.progressType === "PERCENT"
+                        ? goal.currentValuePercent ?? ""
+                        : goal.currentValueNumeric ?? ""
+                    }
                     min={goal.progressType === "PERCENT" ? 0 : undefined}
                     max={goal.progressType === "PERCENT" ? 100 : undefined}
                     step={goal.unit === "$" ? "0.01" : "1"}
@@ -445,7 +557,13 @@ export default function CheckinPage({ params }: { params: { weekStart: string } 
                   <legend>{prompt}</legend>
                   {meta.options.map((opt) => (
                     <label key={`${q.id}-${opt}`} style={{ display: "block" }}>
-                      <input type="radio" name={`question-${q.id}`} value={opt} required={q.required} /> {opt}
+                      <input
+                        type="radio"
+                        name={`question-${q.id}`}
+                        value={opt}
+                        required={q.required}
+                        defaultChecked={currentAnswersByQuestionId[q.id]?.textAnswer === opt}
+                      /> {opt}
                     </label>
                   ))}
                 </fieldset>
@@ -458,7 +576,12 @@ export default function CheckinPage({ params }: { params: { weekStart: string } 
                   <legend>{prompt}</legend>
                   {meta.options.map((opt) => (
                     <label key={`${q.id}-${opt}`} style={{ display: "block" }}>
-                      <input type="checkbox" name={`question-${q.id}`} value={opt} /> {opt}
+                      <input
+                        type="checkbox"
+                        name={`question-${q.id}`}
+                        value={opt}
+                        defaultChecked={(currentAnswersByQuestionId[q.id]?.textAnswer ?? "").split(", ").includes(opt)}
+                      /> {opt}
                     </label>
                   ))}
                 </fieldset>
@@ -470,7 +593,11 @@ export default function CheckinPage({ params }: { params: { weekStart: string } 
               return (
                 <label key={q.id}>
                   {prompt}
-                  <select name={`question-${q.id}`} required={q.required} defaultValue="">
+                  <select
+                    name={`question-${q.id}`}
+                    required={q.required}
+                    defaultValue={currentAnswersByQuestionId[q.id]?.textAnswer ?? ""}
+                  >
                     <option value="" disabled>Select rank</option>
                     {Array.from({ length: rankMax }, (_, i) => i + 1).map((n) => (
                       <option key={n} value={String(n)}>{n}</option>
@@ -491,11 +618,36 @@ export default function CheckinPage({ params }: { params: { weekStart: string } 
               return (
                 <fieldset key={q.id} style={{ border: "none", padding: 0, margin: 0 }}>
                   <legend>{prompt}</legend>
-                  {likertOptions.map((opt) => (
-                    <label key={`${q.id}-${opt}`} style={{ display: "block" }}>
-                      <input type="radio" name={`question-${q.id}`} value={opt} required={q.required} /> {opt}
-                    </label>
-                  ))}
+                  <div
+                    style={{
+                      display: "grid",
+                      gridTemplateColumns: "repeat(5, minmax(0, 1fr))",
+                      gap: "0.75rem",
+                      marginTop: "0.55rem",
+                      alignItems: "start"
+                    }}
+                  >
+                    {likertOptions.map((opt) => (
+                      <label
+                        key={`${q.id}-${opt}`}
+                        style={{
+                          display: "grid",
+                          gap: "0.35rem",
+                          justifyItems: "center",
+                          textAlign: "center"
+                        }}
+                      >
+                        <input
+                          type="radio"
+                          name={`question-${q.id}`}
+                          value={opt}
+                          required={q.required}
+                          defaultChecked={currentAnswersByQuestionId[q.id]?.textAnswer === opt}
+                        />
+                        <span className="small">{opt}</span>
+                      </label>
+                    ))}
+                  </div>
                 </fieldset>
               );
             }
@@ -503,14 +655,72 @@ export default function CheckinPage({ params }: { params: { weekStart: string } 
             return (
               <label key={q.id}>
                 {prompt}
-                <textarea name={`question-${q.id}`} required={q.required} />
+                <textarea
+                  name={`question-${q.id}`}
+                  required={q.required}
+                  defaultValue={currentAnswersByQuestionId[q.id]?.textAnswer ?? ""}
+                />
               </label>
             );
           })}
 
           <button type="submit">Submit check-in</button>
         </form>
-      )}
+
+      <section className="visual-card" style={{ display: "grid", gap: "0.7rem", marginTop: "0.8rem" }}>
+        <div className="section-head" style={{ marginBottom: 0 }}>
+          <h2 style={{ margin: 0 }}>Previous Check-ins</h2>
+          <p className="small" style={{ margin: 0 }}>
+            Review your prior notes, priorities, and goal progress.
+          </p>
+        </div>
+        {(data.history ?? []).length ? (
+          <div className="grid" style={{ gap: "0.7rem" }}>
+            {(data.history ?? []).map((entry) => (
+              <details key={entry.id} className="card" style={{ padding: "0.8rem" }}>
+                <summary style={{ cursor: "pointer", fontWeight: 700 }}>
+                  Week of {formatDisplayDate(entry.weekStartDate)}
+                </summary>
+                <div className="grid" style={{ gap: "0.7rem", marginTop: "0.7rem" }}>
+                  <p className="small" style={{ margin: 0 }}>
+                    Submitted on {formatDisplayDate(entry.submittedAt.slice(0, 10))}.
+                  </p>
+                  <div className="grid" style={{ gap: "0.45rem" }}>
+                    <strong>Goal progress</strong>
+                    {entry.goals.map((goal) => (
+                      <div key={goal.id} className="card" style={{ padding: "0.65rem" }}>
+                        <strong>{displayGoalTitle(goal.title)}</strong>
+                        <p className="small" style={{ margin: "0.2rem 0 0" }}>
+                          {formatHistoryGoalValue(goal)}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="grid" style={{ gap: "0.45rem" }}>
+                    <strong>Priorities</strong>
+                    {entry.priorities.length ? entry.priorities.map((priority) => (
+                      <div key={priority} className="card" style={{ padding: "0.65rem" }}>
+                        <p className="small" style={{ margin: 0 }}>{priority}</p>
+                      </div>
+                    )) : <p className="small" style={{ margin: 0 }}>No priorities submitted.</p>}
+                  </div>
+                  <div className="grid" style={{ gap: "0.45rem" }}>
+                    <strong>Additional responses</strong>
+                    {entry.answers.length ? entry.answers.map((answer) => (
+                      <div key={answer.questionId} className="card" style={{ padding: "0.65rem" }}>
+                        <strong>{decodeQuestionPrompt(answer.prompt).prompt}</strong>
+                        <p className="small" style={{ margin: "0.2rem 0 0" }}>{formatHistoryAnswerValue(answer)}</p>
+                      </div>
+                    )) : <p className="small" style={{ margin: 0 }}>No additional responses.</p>}
+                  </div>
+                </div>
+              </details>
+            ))}
+          </div>
+        ) : (
+          <p className="small" style={{ margin: 0 }}>No prior check-ins yet.</p>
+        )}
+      </section>
     </section>
   );
 }
