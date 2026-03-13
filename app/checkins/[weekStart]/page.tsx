@@ -671,7 +671,7 @@ export default function CheckinPage({ params }: { params: { weekStart: string } 
         <div className="section-head" style={{ marginBottom: 0 }}>
           <h2 style={{ margin: 0 }}>Previous Check-ins</h2>
           <p className="small" style={{ margin: 0 }}>
-            Review your prior notes, priorities, and goal progress.
+            Review your personal check-in history.
           </p>
         </div>
         {(data.history ?? []).length ? (

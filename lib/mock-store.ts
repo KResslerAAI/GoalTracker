@@ -645,11 +645,22 @@ export function getMockCheckinData(userId: string, weekStartDate: Date, teamId: 
   const goals = Object.values(s.goalsById)
     .filter((g) => g.ownerUserId === userId && g.status === GoalStatus.ACTIVE)
     .map((goal) => {
+      const current = s.progressByGoalWeek[goalWeekKey(goal.id, weekStartDate)];
       const previous = Object.values(s.progressByGoalWeek)
         .filter((entry) => entry.personalGoalId === goal.id && entry.weekStartDate.getTime() < weekStartDate.getTime())
         .sort((a, b) => b.weekStartDate.getTime() - a.weekStartDate.getTime())[0];
       return {
         ...goal,
+        currentValueBoolean: current?.valueBoolean ?? null,
+        currentValuePercent: current?.valuePercent ?? null,
+        currentValueNumeric: current?.valueNumeric ?? null,
+        currentProgressPercent: progressToPercent({
+          progressType: goal.progressType,
+          valueBoolean: current?.valueBoolean,
+          valuePercent: current?.valuePercent,
+          valueNumeric: current?.valueNumeric,
+          targetValue: goal.targetValue
+        }),
         previousValueBoolean: previous?.valueBoolean ?? null,
         previousValuePercent: previous?.valuePercent ?? null,
         previousValueNumeric: previous?.valueNumeric ?? null,
@@ -664,33 +675,97 @@ export function getMockCheckinData(userId: string, weekStartDate: Date, teamId: 
       };
     });
   const questions = teamId ? s.teamQuestionsByTeamId[teamId] ?? defaultQuestions : defaultQuestions;
-  const submitted = s.checkinStatusByKey[checkinKey(userId, weekStartDate)] === CheckinStatus.SUBMITTED;
+  const key = checkinKey(userId, weekStartDate);
+  const submitted = s.checkinStatusByKey[key] === CheckinStatus.SUBMITTED;
   const previousPriorities: string[] = [];
+  const currentPriorities: string[] = [];
   let lastCheckinDate: string | null = null;
   const nextActionsQuestion = questions.find((q) => q.key === "weekly_next_steps");
+  const currentAnswers = (s.checkinAnswersByKey[key] ?? []).map((answer) => ({
+    questionId: answer.questionId,
+    textAnswer: answer.textAnswer ?? null,
+    numberAnswer: null,
+    booleanAnswer: null
+  }));
+
+  if (nextActionsQuestion) {
+    const currentAnswer = currentAnswers.find((answer) => answer.questionId === nextActionsQuestion.id);
+    currentPriorities.push(...decodePrioritiesAnswer(currentAnswer?.textAnswer ?? undefined));
+  }
 
   if (nextActionsQuestion) {
     const submittedWeeks = Object.entries(s.checkinStatusByKey)
       .filter(([key, status]) => key.startsWith(`${userId}:`) && status === CheckinStatus.SUBMITTED)
-      .map(([key]) => key.split(":")[1])
+      .map(([entryKey]) => entryKey.split(":")[1])
       .filter((iso) => iso < weekStartDate.toISOString().slice(0, 10))
       .sort();
     const latest = submittedWeeks[submittedWeeks.length - 1];
-    if (latest) {
+    if (submitted) {
+      lastCheckinDate = weekStartDate.toISOString().slice(0, 10);
+    } else if (latest) {
       lastCheckinDate = latest;
+    }
+    if (latest) {
       const prevKey = `${userId}:${latest}`;
       const answer = (s.checkinAnswersByKey[prevKey] ?? []).find((a) => a.questionId === nextActionsQuestion.id);
       previousPriorities.push(...decodePrioritiesAnswer(answer?.textAnswer));
     }
   }
 
+  const history = Object.entries(s.checkinStatusByKey)
+    .filter(([entryKey, status]) => entryKey.startsWith(`${userId}:`) && status === CheckinStatus.SUBMITTED)
+    .map(([entryKey]) => entryKey.split(":")[1])
+    .sort((a, b) => b.localeCompare(a))
+    .map((iso) => {
+      const answers = s.checkinAnswersByKey[`${userId}:${iso}`] ?? [];
+      const priorities = nextActionsQuestion
+        ? decodePrioritiesAnswer(answers.find((answer) => answer.questionId === nextActionsQuestion.id)?.textAnswer)
+        : [];
+      return {
+        id: `${userId}:${iso}`,
+        weekStartDate: iso,
+        submittedAt: `${iso}T00:00:00.000Z`,
+        priorities,
+        answers: answers
+          .filter((answer) => answer.questionId !== nextActionsQuestion?.id)
+          .map((answer) => ({
+            questionId: answer.questionId,
+            prompt: questions.find((question) => question.id === answer.questionId)?.prompt ?? "Question",
+            textAnswer: answer.textAnswer ?? null,
+            numberAnswer: null,
+            booleanAnswer: null
+          })),
+        goals: goals.map((goal) => {
+          const entry = s.progressByGoalWeek[goalWeekKey(goal.id, new Date(`${iso}T00:00:00.000Z`))];
+          return {
+            id: goal.id,
+            title: goal.title,
+            progressType: goal.progressType,
+            unit: goal.unit ?? null,
+            valueBoolean: entry?.valueBoolean ?? null,
+            valuePercent: entry?.valuePercent ?? null,
+            valueNumeric: entry?.valueNumeric ?? null
+          };
+        })
+      };
+    });
+
   return {
     due: true,
-    checkin: submitted ? { id: makeId("checkin") } : null,
+    checkin: submitted
+      ? {
+          id: key,
+          status: CheckinStatus.SUBMITTED,
+          submittedAt: `${weekStartDate.toISOString().slice(0, 10)}T00:00:00.000Z`
+        }
+      : null,
     questions,
     goals,
     previousPriorities,
-    lastCheckinDate
+    currentPriorities,
+    currentAnswers,
+    lastCheckinDate,
+    history
   };
 }
 
