@@ -84,6 +84,9 @@ if (!isMockMode && process.env.EMAIL_SERVER && process.env.EMAIL_FROM) {
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
   trustHost: true,
+  pages: {
+    signIn: "/login",
+  },
   ...(isMockMode
     ? {
         session: {
