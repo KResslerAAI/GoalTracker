@@ -7,10 +7,7 @@ import { prisma } from "@/lib/prisma";
 import { getMockUserByEmail, isMockMode, updateMockUser } from "@/lib/mock-store";
 
 const providers: Provider[] = [];
-const allowInsecureCredentialsAuth =
-  isMockMode ||
-  process.env.ALLOW_INSECURE_CREDENTIALS_AUTH === "true" ||
-  process.env.NODE_ENV !== "production";
+const allowInsecureCredentialsAuth = true;
 
 if (allowInsecureCredentialsAuth) {
   providers.push(
