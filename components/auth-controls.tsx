@@ -9,11 +9,21 @@ export function AuthControls() {
   const { data: session, status } = useSession();
   const pathname = usePathname();
   const detailsRef = useRef<HTMLDetailsElement>(null);
+  const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  function openMenu() {
+    if (closeTimer.current) clearTimeout(closeTimer.current);
+    if (detailsRef.current) detailsRef.current.open = true;
+  }
+
+  function scheduleClose() {
+    closeTimer.current = setTimeout(() => {
+      if (detailsRef.current) detailsRef.current.open = false;
+    }, 300);
+  }
 
   function closeMenu() {
-    if (detailsRef.current) {
-      detailsRef.current.open = false;
-    }
+    if (detailsRef.current) detailsRef.current.open = false;
   }
 
   useEffect(() => {
@@ -29,7 +39,7 @@ export function AuthControls() {
   }
 
   return (
-    <details ref={detailsRef} className="nav-dropdown user-dropdown" onMouseLeave={closeMenu}>
+    <details ref={detailsRef} className="nav-dropdown user-dropdown" onMouseEnter={openMenu} onMouseLeave={scheduleClose}>
       <summary className="nav-link">{session.user.name ?? "Account"}</summary>
       <div className="dropdown-menu">
         <Link href="/goals" onClick={closeMenu}>My Goals</Link>
