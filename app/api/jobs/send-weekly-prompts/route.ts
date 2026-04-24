@@ -4,6 +4,10 @@ import { alreadySent, ensurePendingCheckin, getDueUsers, logSent } from "@/lib/c
 import { weekStart } from "@/lib/date";
 import { sendCheckinEmail } from "@/lib/notifications";
 
+export async function GET() {
+  return POST();
+}
+
 export async function POST() {
   const teamId = process.env.DEFAULT_TEAM_ID;
   if (!teamId) {

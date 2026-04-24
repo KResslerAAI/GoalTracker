@@ -5,6 +5,10 @@ import { weekStart } from "@/lib/date";
 import { sendCheckinEmail } from "@/lib/notifications";
 import { prisma } from "@/lib/prisma";
 
+export async function GET() {
+  return POST();
+}
+
 export async function POST() {
   const teamId = process.env.DEFAULT_TEAM_ID;
   if (!teamId) {
