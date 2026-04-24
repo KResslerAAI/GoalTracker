@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { requireManager } from "@/lib/authz";
 import { prisma } from "@/lib/prisma";
+import { sendWelcomeEmail } from "@/lib/notifications";
 import { inviteMockTeamMember, isMockMode, listMockTeamMembers, removeMockTeamMember } from "@/lib/mock-store";
 
 const schema = z.object({
@@ -77,6 +78,12 @@ export async function POST(req: NextRequest) {
         role: payload.role,
         active: true
       }
+    });
+
+    await sendWelcomeEmail({
+      to: user.email,
+      name: user.name,
+      appUrl: process.env.APP_URL ?? "https://goaltracker-pi.vercel.app"
     });
 
     return NextResponse.json({ invited: true, userId: user.id });
