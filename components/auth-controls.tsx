@@ -29,7 +29,7 @@ export function AuthControls() {
   }
 
   return (
-    <details ref={detailsRef} className="nav-dropdown user-dropdown">
+    <details ref={detailsRef} className="nav-dropdown user-dropdown" onMouseLeave={closeMenu}>
       <summary className="nav-link">{session.user.name ?? "Account"}</summary>
       <div className="dropdown-menu">
         <Link href="/goals" onClick={closeMenu}>My Goals</Link>

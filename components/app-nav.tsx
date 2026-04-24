@@ -26,7 +26,7 @@ export function AppNav() {
     <nav className="app-nav">
       <Link className="nav-link" href="/checkin">Check-in</Link>
       {status !== "loading" && role === Role.MANAGER && (
-        <details ref={detailsRef} className="nav-dropdown">
+        <details ref={detailsRef} className="nav-dropdown" onMouseLeave={closeMenu}>
           <summary className="nav-link">Manager Tools</summary>
           <div className="dropdown-menu">
             <Link href="/setup" onClick={closeMenu}>Team Setup</Link>
