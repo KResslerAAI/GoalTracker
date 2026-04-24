@@ -9,10 +9,8 @@ export async function GET() {
 }
 
 export async function POST() {
-  const teamId = process.env.DEFAULT_TEAM_ID;
-  if (!teamId) {
-    return NextResponse.json({ error: "Missing DEFAULT_TEAM_ID" }, { status: 400 });
-  }
+  const teamId = process.env.DEFAULT_TEAM_ID || "cmmji5ik40000aglyke9ltpd5";
+
 
   const currentWeek = weekStart(new Date());
   const dueUsers = await getDueUsers(teamId, currentWeek);
