@@ -13,9 +13,7 @@ export default function LoginPage() {
   const [role, setRole] = useState<Role>(Role.MEMBER);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
-  const useCredentialsAuth =
-    process.env.NEXT_PUBLIC_ALLOW_INSECURE_CREDENTIALS_AUTH === "true" ||
-    process.env.NODE_ENV !== "production";
+  const useCredentialsAuth = true;
 
   const onSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
