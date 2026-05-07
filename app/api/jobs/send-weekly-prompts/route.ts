@@ -32,21 +32,25 @@ export async function POST() {
       continue;
     }
 
-    await sendCheckinEmail({
-      to: user.email,
-      kind: NotificationKind.FRIDAY_PROMPT,
-      weekStartDate: currentWeek,
-      appUrl: process.env.APP_URL ?? "http://localhost:3000"
-    });
+    try {
+      await sendCheckinEmail({
+        to: user.email,
+        kind: NotificationKind.FRIDAY_PROMPT,
+        weekStartDate: currentWeek,
+        appUrl: process.env.APP_URL ?? "http://localhost:3000"
+      });
 
-    await logSent({
-      userId: user.id,
-      weekStartDate: currentWeek,
-      kind: NotificationKind.FRIDAY_PROMPT,
-      deliveryStatus: "SENT"
-    });
+      await logSent({
+        userId: user.id,
+        weekStartDate: currentWeek,
+        kind: NotificationKind.FRIDAY_PROMPT,
+        deliveryStatus: "SENT"
+      });
 
-    sent += 1;
+      sent += 1;
+    } catch {
+      // continue processing remaining users if one send fails
+    }
   }
 
   return NextResponse.json({ sent, dueUsers: dueUsers.length });
