@@ -20,7 +20,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
                 <img className="brand-logo" src="/pathfinder_color_white.png" alt="Automation Anywhere Pathfinder logo" />
               </div>
               <div className="header-actions">
-                <span className="app-title-text">GOAL TRACKER</span>
+                <span className="app-title-text">Goal Tracker</span>
                 <div className="header-nav-row">
                   <AppNav />
                   <AuthControls />

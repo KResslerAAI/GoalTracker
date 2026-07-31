@@ -115,11 +115,10 @@ main {
 }
 
 .app-title-text {
-  color: #ff5a10;
+  color: rgba(255, 255, 255, 0.55);
   font-size: 0.9rem;
-  letter-spacing: 0.08em;
-  font-weight: 700;
-  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  font-weight: 400;
 }
 
 .header-nav-row {
@@ -147,7 +146,7 @@ main {
   align-items: center;
   gap: 0.35rem;
   line-height: 1;
-  font-weight: 600;
+  font-weight: 400;
   cursor: pointer;
 }
 
@@ -222,7 +221,7 @@ main {
   color: #000000;
   text-align: left;
   font-size: 0.9rem;
-  font-weight: 600;
+  font-weight: 400;
   background: transparent;
   border: none;
   cursor: pointer;
@@ -254,13 +253,13 @@ main {
   background: linear-gradient(180deg, #ffffff 0%, var(--surface-soft) 100%);
   border: 1px solid var(--border);
   border-radius: 14px;
-  padding: 1.05rem;
+  padding: 1.5rem;
   box-shadow: 0 1px 0 rgba(0, 0, 0, 0.04);
 }
 
 .page-shell {
   display: grid;
-  gap: 1rem;
+  gap: 1.5rem;
 }
 
 .page-shell.narrow {
@@ -327,10 +326,16 @@ button {
   padding: 0.58rem;
   cursor: pointer;
   font-size: 0.78rem;
-  font-weight: 600;
+  font-weight: 500;
   line-height: 1;
   width: auto;
   justify-self: start;
+}
+
+.outline-button {
+  background: transparent;
+  color: #555555;
+  border: 1px solid #cccccc;
 }
 
 button:hover {
@@ -358,12 +363,12 @@ button:disabled {
   border-radius: 999px;
   padding: 0.2rem 0.6rem;
   font-size: 0.8rem;
-  font-weight: 700;
+  font-weight: 400;
 }
 
-.green { background: #dcfce7; color: var(--good); }
-.yellow { background: #fef3c7; color: var(--warn); }
-.red { background: #fee2e2; color: var(--bad); }
+.green { background: #edf7ed; color: #2d7a2d; }
+.yellow { background: #fdf5e6; color: #9a6c1a; }
+.red { background: #fef0ea; color: #c94f0a; }
 
 .section-expander {
   border: 1px solid var(--border);
@@ -375,7 +380,7 @@ button:disabled {
   cursor: pointer;
   list-style: none;
   padding: 0.9rem 1rem;
-  font-weight: 700;
+  font-weight: 500;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -684,7 +689,7 @@ button:disabled {
   display: inline-flex;
   align-items: center;
   gap: 0.45rem;
-  font-weight: 600;
+  font-weight: 400;
 }
 
 .team-goal-expander > summary::-webkit-details-marker {
@@ -699,6 +704,12 @@ button:disabled {
 
 .team-goal-expander[open] > summary::after {
   transform: rotate(180deg);
+}
+
+h1,
+h2,
+h3 {
+  font-weight: 500;
 }
 
 h2,
