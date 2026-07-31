@@ -61,8 +61,7 @@ export default function QuestionsPage() {
   const [editRankMax, setEditRankMax] = useState(5);
 
   const loadQuestions = async () => {
-    setQuestionMessage(null);
-    const res = await fetch("/api/checkin-template");
+    const res = await fetch("/api/checkin-template", { cache: "no-store" });
     const body = await res.json();
     if (res.ok) {
       setQuestions(body);
@@ -73,7 +72,7 @@ export default function QuestionsPage() {
 
   const addQuestion = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    setQuestionMessage(null);
+    setQuestionMessage(null);  // clear before starting
 
     const key = createQuestionKey(questionPrompt);
     const options = questionType === "multiple_choice" || questionType === "single_choice"
@@ -100,8 +99,8 @@ export default function QuestionsPage() {
 
     setQuestionPrompt("");
     setQuestionOptions("");
-    setQuestionMessage("Check-in question added.");
     await loadQuestions();
+    setQuestionMessage("Check-in question added.");
   };
 
   const addSelectedBankQuestions = async () => {
@@ -134,8 +133,8 @@ export default function QuestionsPage() {
       return;
     }
     setSelectedBankPrompts([]);
-    setQuestionMessage(`Added ${successCount} question${successCount === 1 ? "" : "s"} from bank.`);
     await loadQuestions();
+    setQuestionMessage(`Added ${successCount} question${successCount === 1 ? "" : "s"} from bank.`);
   };
 
   const startEditing = (question: Question) => {
@@ -170,8 +169,8 @@ export default function QuestionsPage() {
       return;
     }
     setEditingQuestionId(null);
-    setQuestionMessage("Question updated.");
     await loadQuestions();
+    setQuestionMessage("Question updated.");
   };
 
   const deleteQuestion = async (questionId: string) => {
@@ -185,8 +184,8 @@ export default function QuestionsPage() {
     if (editingQuestionId === questionId) {
       setEditingQuestionId(null);
     }
-    setQuestionMessage("Question deleted.");
     await loadQuestions();
+    setQuestionMessage("Question deleted.");
   };
 
   useEffect(() => {
