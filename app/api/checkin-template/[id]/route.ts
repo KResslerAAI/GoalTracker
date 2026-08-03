@@ -90,19 +90,10 @@ export async function DELETE(_: NextRequest, { params }: { params: { id: string 
       return NextResponse.json({ error: "Default questions cannot be deleted" }, { status: 400 });
     }
 
-    const usageCount = await prisma.weeklyCheckinAnswer.count({
-      where: { questionId: params.id }
-    });
-    if (usageCount > 0) {
-      return NextResponse.json(
-        { error: "Cannot delete a question that already has submitted answers. Edit it instead." },
-        { status: 400 }
-      );
-    }
-
-    await prisma.checkinTemplateQuestion.delete({
-      where: { id: params.id }
-    });
+    await prisma.$transaction([
+      prisma.weeklyCheckinAnswer.deleteMany({ where: { questionId: params.id } }),
+      prisma.checkinTemplateQuestion.delete({ where: { id: params.id } })
+    ]);
 
     return NextResponse.json({ ok: true });
   } catch (error) {

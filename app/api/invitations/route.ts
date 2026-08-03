@@ -51,7 +51,8 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "No team assigned" }, { status: 400 });
     }
 
-    const payload = schema.parse(await req.json());
+    const raw = schema.parse(await req.json());
+    const payload = { ...raw, email: raw.email.trim().toLowerCase() };
 
     if (isMockMode) {
       const invited = inviteMockTeamMember({
@@ -80,11 +81,15 @@ export async function POST(req: NextRequest) {
       }
     });
 
-    await sendWelcomeEmail({
-      to: user.email,
-      name: user.name,
-      appUrl: process.env.APP_URL ?? "https://goaltracker-pi.vercel.app"
-    });
+    try {
+      await sendWelcomeEmail({
+        to: user.email,
+        name: user.name,
+        appUrl: process.env.APP_URL ?? "https://goaltracker-pi.vercel.app"
+      });
+    } catch {
+      // welcome email failure should not prevent the member from being added
+    }
 
     return NextResponse.json({ invited: true, userId: user.id });
   } catch (error) {

@@ -646,7 +646,7 @@ export default function DashboardPage() {
                       {member.email} • {member.cadence}
                     </p>
                   </div>
-                  <span className={`badge ${member.health}`}>{member.health}</span>
+                  <span className={`badge ${member.health}`}>{{ green: "On Track", yellow: "At Risk", red: "Behind" }[member.health] ?? member.health}</span>
                 </div>
                 <ProgressBar value={member.progressPercent} />
                 <p className="small" style={{ marginBottom: 0 }}>
