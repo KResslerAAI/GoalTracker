@@ -350,6 +350,116 @@ export default function CheckinPage({ params }: { params: { weekStart: string } 
     );
   }
 
+  if (submissionSummary) {
+    return (
+      <section className="card">
+        <div className="section-head" style={{ marginBottom: "1.2rem" }}>
+          <h1 style={{ margin: 0 }}>Check-in Submitted</h1>
+          <p className="small" style={{ margin: "0.35rem 0 0" }}>
+            {data.checkin?.submittedAt
+              ? `Saved on ${formatDisplayDate(data.checkin.submittedAt.slice(0, 10))}.`
+              : "Your responses have been saved."}
+          </p>
+        </div>
+
+        <div className="grid" style={{ gap: "1.2rem" }}>
+          {submissionSummary.goals.length > 0 && (
+            <div className="grid" style={{ gap: "0.55rem" }}>
+              <strong>Goal progress</strong>
+              {submissionSummary.goals.map((goal) => (
+                <div key={goal.id} className="visual-card" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "1rem" }}>
+                  <span>{goal.title}</span>
+                  <span className="small" style={{ flexShrink: 0, fontWeight: 500, color: "#333" }}>{goal.value}</span>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {submissionSummary.priorities.length > 0 && (
+            <div className="grid" style={{ gap: "0.55rem" }}>
+              <strong>Priorities for next week</strong>
+              {submissionSummary.priorities.map((priority) => (
+                <div key={priority} className="visual-card">
+                  <p className="small" style={{ margin: 0 }}>{priority}</p>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {submissionSummary.answers.filter((a) => a.value !== "No response").length > 0 && (
+            <div className="grid" style={{ gap: "0.55rem" }}>
+              <strong>Your responses</strong>
+              {submissionSummary.answers.filter((a) => a.value !== "No response").map((answer) => (
+                <div key={answer.questionId} className="visual-card" style={{ display: "grid", gap: "0.3rem" }}>
+                  <p className="small" style={{ margin: 0, color: "#666" }}>{answer.prompt}</p>
+                  <p style={{ margin: 0 }}>{answer.value}</p>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        <button
+          type="button"
+          onClick={() => setSubmissionSummary(null)}
+          style={{ marginTop: "1.2rem" }}
+          className="outline-button"
+        >
+          Edit submission
+        </button>
+
+        <section className="visual-card" style={{ display: "grid", gap: "0.7rem", marginTop: "1.5rem" }}>
+          <div className="section-head" style={{ marginBottom: 0 }}>
+            <h2 style={{ margin: 0 }}>Previous Check-ins</h2>
+            <p className="small" style={{ margin: 0 }}>Review your personal check-in history.</p>
+          </div>
+          {(data.history ?? []).length ? (
+            <div className="grid" style={{ gap: "0.7rem" }}>
+              {(data.history ?? []).map((entry) => (
+                <details key={entry.id} className="card" style={{ padding: "0.8rem" }}>
+                  <summary style={{ cursor: "pointer", fontWeight: 500 }}>
+                    Week of {formatDisplayDate(entry.weekStartDate)}
+                  </summary>
+                  <div className="grid" style={{ gap: "0.7rem", marginTop: "0.7rem" }}>
+                    <p className="small" style={{ margin: 0 }}>Submitted on {formatDisplayDate(entry.submittedAt.slice(0, 10))}.</p>
+                    <div className="grid" style={{ gap: "0.45rem" }}>
+                      <strong>Goal progress</strong>
+                      {entry.goals.map((goal) => (
+                        <div key={goal.id} className="card" style={{ padding: "0.65rem" }}>
+                          <strong>{displayGoalTitle(goal.title)}</strong>
+                          <p className="small" style={{ margin: "0.2rem 0 0" }}>{formatHistoryGoalValue(goal)}</p>
+                        </div>
+                      ))}
+                    </div>
+                    <div className="grid" style={{ gap: "0.45rem" }}>
+                      <strong>Priorities</strong>
+                      {entry.priorities.length ? entry.priorities.map((priority) => (
+                        <div key={priority} className="card" style={{ padding: "0.65rem" }}>
+                          <p className="small" style={{ margin: 0 }}>{priority}</p>
+                        </div>
+                      )) : <p className="small" style={{ margin: 0 }}>No priorities submitted.</p>}
+                    </div>
+                    <div className="grid" style={{ gap: "0.45rem" }}>
+                      <strong>Additional responses</strong>
+                      {entry.answers.length ? entry.answers.map((answer) => (
+                        <div key={answer.questionId} className="card" style={{ padding: "0.65rem" }}>
+                          <strong>{decodeQuestionPrompt(answer.prompt).prompt}</strong>
+                          <p className="small" style={{ margin: "0.2rem 0 0" }}>{formatHistoryAnswerValue(answer)}</p>
+                        </div>
+                      )) : <p className="small" style={{ margin: 0 }}>No additional responses.</p>}
+                    </div>
+                  </div>
+                </details>
+              ))}
+            </div>
+          ) : (
+            <p className="small" style={{ margin: 0 }}>No prior check-ins yet.</p>
+          )}
+        </section>
+      </section>
+    );
+  }
+
   return (
     <section className="card">
       <div className="section-head">
@@ -358,13 +468,8 @@ export default function CheckinPage({ params }: { params: { weekStart: string } 
           You checked in last on {formatLastCheckinDate(data.lastCheckinDate)}. What&apos;s changed since then?
         </p>
       </div>
-      {savedMessage ? (
-        <div className="card" style={{ padding: "0.8rem", marginBottom: "0.8rem" }}>
-          <p className="small" style={{ margin: 0 }}>{savedMessage}</p>
-        </div>
-      ) : null}
 
-      {(hasSubmittedCurrentWeek || submissionSummary) ? (
+      {hasSubmittedCurrentWeek ? (
         <section className="visual-card" style={{ display: "grid", gap: "0.65rem", marginBottom: "0.8rem" }}>
           <h2 style={{ margin: 0 }}>Current Saved Check-in</h2>
           <p className="small" style={{ margin: 0 }}>
@@ -373,7 +478,7 @@ export default function CheckinPage({ params }: { params: { weekStart: string } 
               : "Your current week submission is saved."}
           </p>
           <div className="grid" style={{ gap: "0.55rem" }}>
-            {(submissionSummary?.goals ?? data.goals.map((goal) => ({
+            {data.goals.map((goal) => ({
               id: goal.id,
               title: displayGoalTitle(goal.title),
               value: goal.progressType === "BOOLEAN"
@@ -382,7 +487,7 @@ export default function CheckinPage({ params }: { params: { weekStart: string } 
                     goal,
                     Number(goal.progressType === "PERCENT" ? goal.currentValuePercent ?? 0 : goal.currentValueNumeric ?? 0)
                   )
-            }))).map((goal) => (
+            })).map((goal) => (
               <div key={goal.id} className="card" style={{ padding: "0.7rem" }}>
                 <strong>{goal.title}</strong>
                 <p className="small" style={{ margin: "0.25rem 0 0" }}>{goal.value}</p>
@@ -391,9 +496,9 @@ export default function CheckinPage({ params }: { params: { weekStart: string } 
           </div>
           <div className="grid" style={{ gap: "0.55rem" }}>
             <strong>Saved priorities</strong>
-            {(data.currentPriorities ?? submissionSummary?.priorities ?? []).length ? (
+            {(data.currentPriorities ?? []).length ? (
               <div className="grid" style={{ gap: "0.45rem" }}>
-                {(data.currentPriorities ?? submissionSummary?.priorities ?? []).map((priority) => (
+                {(data.currentPriorities ?? []).map((priority) => (
                   <div key={priority} className="card" style={{ padding: "0.65rem" }}>
                     <p className="small" style={{ margin: 0 }}>{priority}</p>
                   </div>
