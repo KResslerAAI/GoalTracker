@@ -43,6 +43,7 @@ export function AppNav() {
             <Link href="/setup" onClick={() => { if (detailsRef.current) detailsRef.current.open = false; }}>Team Setup</Link>
             <Link href="/dashboard" onClick={() => { if (detailsRef.current) detailsRef.current.open = false; }}>Manager Dashboard</Link>
             <Link href="/questions" onClick={() => { if (detailsRef.current) detailsRef.current.open = false; }}>Check-in Questions</Link>
+            <Link href="/manager/checkins" onClick={() => { if (detailsRef.current) detailsRef.current.open = false; }}>Team Check-ins</Link>
           </div>
         </details>
       )}
